@@ -66,6 +66,21 @@ case "$ARCH" in
 	*) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
 esac
 
+# a few vendored submodules have no aarch64 support upstream yet; apply the small
+# patches from code/tools/ci/arm64-patches/ (idempotent: skipped when already applied)
+if [ "$PREMAKE_ARCH" = "arm64" ]; then
+	for patch in /src/code/tools/ci/arm64-patches/*.patch; do
+		target=/src/$(basename "$patch" .patch | tr '-' '/')
+
+		if git -C "$target" apply --check --reverse "$patch" >/dev/null 2>&1; then
+			echo "arm64 patch already applied: $patch"
+		else
+			echo "applying arm64 patch: $patch"
+			git -C "$target" apply "$patch"
+		fi
+	done
+fi
+
 premake5 gmake2 --game=server --cc=clang --dotnet=msnet --arch=$PREMAKE_ARCH
 cd build/server/linux
 

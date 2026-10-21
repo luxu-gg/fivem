@@ -1,0 +1,17 @@
+diff --git a/xenium/utils.hpp b/xenium/utils.hpp
+index 81d1191..c25a448 100644
+--- a/xenium/utils.hpp
++++ b/xenium/utils.hpp
+@@ -75,6 +75,12 @@ namespace xenium { namespace utils {
+   static inline std::uint64_t getticks(void) {
+     return __rdtsc();
+   }
++#elif defined(__aarch64__)
++  static inline std::uint64_t getticks(void) {
++      std::uint64_t ret;
++      __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(ret));
++      return ret;
++  }
+ #else
+   // TODO - add support for more compilers!
+   #error "Unsupported compiler"

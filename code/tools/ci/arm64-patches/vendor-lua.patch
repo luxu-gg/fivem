@@ -1,0 +1,13 @@
+diff --git a/loslib.c b/loslib.c
+index 3a54d97..a761e2d 100644
+--- a/loslib.c
++++ b/loslib.c
+@@ -171,7 +171,7 @@
+ 
+ #if defined(_MSC_VER) && defined(_M_X64)
+   #include <intrin.h>
+-#elif defined(__GNUC__) && defined(__has_include) && __has_include(<x86intrin.h>)
++#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__)) && defined(__has_include) && __has_include(<x86intrin.h>)
+   #include <x86intrin.h>
+ #else
+   #undef LUA_SYS_RDTSC

@@ -1,0 +1,13 @@
+diff --git a/src/lmprof.c b/src/lmprof.c
+index dfb3fb2..eeebe42 100644
+--- a/src/lmprof.c
++++ b/src/lmprof.c
+@@ -181,7 +181,7 @@ static LARGE_INTEGER _winQuery;
+ 
+ #if defined(_MSC_VER) && defined(_M_X64)
+   #include <intrin.h>
+-#elif defined(__GNUC__) && defined(__has_include) && __has_include(<x86intrin.h>)
++#elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__)) && defined(__has_include) && __has_include(<x86intrin.h>)
+   #include <x86intrin.h>
+ #else
+   #undef LUA_SYS_RDTSC
