@@ -51,9 +51,7 @@ return {
 					'{MKDIR} %{cfg.targetdir}/dbg/',
 					('{COPY} %s/%s %%{cfg.targetdir}/dbg/'):format(uvBinDir, pdbName),
                 }
-		else
-			-- TODO(arm64): the prebuilt libuv .so downloaded below is x86_64-only; an aarch64 build
-			-- (and an arch-specific download URL) is required before FXServer can be built for arm64.
+		elseif cfx_is_x86_target() then
 			filter 'files:**/tag.txt'
                 buildmessage 'Preparing libuv'
 
@@ -63,6 +61,21 @@ return {
 
                 buildcommands {
                     ('curl "-z%s/%s" -L "-o%s/%s" "%s/%s"'):format(uvBinDir, soName, uvBinDir, soName, baseURL, soName),
+					('{COPY} %s/%s %%{cfg.targetdir}'):format(uvBinDir, soName),
+                }
+		else
+			-- no prebuilt libuv is published for this architecture: use the distro libuv (libuv-dev;
+			-- the 1.x ABI is stable) and ship a copy of it next to the server binaries
+			filter 'files:**/tag.txt'
+                buildmessage 'Preparing libuv from the system'
+
+                buildoutputs {
+                    ('%%{cfg.targetdir}/%s'):format(soName),
+                }
+
+                buildcommands {
+                    ('{MKDIR} %s'):format(uvBinDir),
+                    ('cp -L /usr/lib/%s %s/%s'):format(soName, uvBinDir, soName),
 					('{COPY} %s/%s %%{cfg.targetdir}'):format(uvBinDir, soName),
                 }
 		end
