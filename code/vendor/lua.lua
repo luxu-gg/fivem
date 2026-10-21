@@ -16,7 +16,10 @@ return {
 	run = function()
 		language "C++"
 		kind "StaticLib"
-		vectorextensions "SSE2" -- @EXPERIMENT
+
+		if cfx_is_x86_target() then
+			vectorextensions "SSE2" -- @EXPERIMENT
+		end
 		
 		if os.istarget('windows') then
 			flags { "LinkTimeOptimization" }
@@ -76,15 +79,19 @@ return {
 			'LMPROF_BUILTIN', -- Use internal headers: lobject.h/lstate.h
 			'LMPROF_HASH_SPLITMIX', -- Use splitmix record hashing
 			'LMPROF_DISABLE_OUTPUT_PATH', -- Disable 'output_path' argument handling.
-
-			--[[
-				Experimental Intrinsics
-				See: citizen-server-impl/include/state/ServerGameState.h
-			--]]
-			'GLM_FORCE_DEFAULT_ALIGNED_GENTYPES',
-			'GLM_FORCE_SSE2',
-			--'GLM_FORCE_SSE3', -- Change vectorextensions
 		}
+
+		--[[
+			Experimental Intrinsics (x86 only; other targets use the portable GLM code paths)
+			See: citizen-server-impl/include/state/ServerGameStatePublic.h
+		--]]
+		if cfx_is_x86_target() then
+			defines {
+				'GLM_FORCE_DEFAULT_ALIGNED_GENTYPES',
+				'GLM_FORCE_SSE2',
+				--'GLM_FORCE_SSE3', -- Change vectorextensions
+			}
+		end
 
 		if noGLM then
 			removedefines {

@@ -27,6 +27,41 @@ newoption {
 	description = "Root directory for bin/ files."
 }
 
+newoption {
+	trigger     = "arch",
+	value       = "ARCH",
+	description = "Target CPU architecture for non-Windows (FXServer) builds.",
+	allowed = {
+		{ "x64",     "x86-64 (default)" },
+		{ "arm64",   "AArch64" },
+		{ "aarch64", "Alias for arm64" },
+	}
+}
+
+-- Target CPU architecture. This is only honoured for non-Windows builds; Windows builds keep
+-- using the per-game `architecture` settings further down.
+local targetArch = (_OPTIONS['arch'] or 'x64'):lower()
+
+if targetArch == 'aarch64' then
+	targetArch = 'arm64'
+end
+
+if targetArch ~= 'x64' and targetArch ~= 'arm64' then
+	error(('unsupported --arch value "%s" (expected x64 or arm64)'):format(_OPTIONS['arch']))
+end
+
+if targetArch ~= 'x64' and os.istarget('windows') then
+	error('--arch is only supported for non-Windows builds')
+end
+
+-- shared with vendor/*.lua and component.lua scripts so they can skip x86-only compiler flags/defines
+_G.cfx_target_arch = targetArch
+_G.cfx_premake_arch = (targetArch == 'arm64') and 'ARM64' or 'x64'
+
+function cfx_is_x86_target()
+	return cfx_target_arch == 'x64'
+end
+
 local PROGRAM_DETAILS = {
 	['server']  = { publicName = 'Server',   cSharp = { nativesFile = 'NativesServer.cs', gameFiles = 'Server/*.cs' } },
 	
@@ -177,14 +212,14 @@ workspace "CitizenMP"
 		buildoptions { '/Zc:preprocessor' }
 
 		systemversion '10.0.22000.0'
-	else
+	elseif cfx_is_x86_target() then
 		vectorextensions 'SSSE3'
 	end
 
 	-- special build dirs for FXServer
 	if _OPTIONS['game'] == 'server' then
 		location ((_OPTIONS['builddir'] or "build/") .. "server/" .. os.target())
-		architecture 'x64'
+		architecture (cfx_premake_arch)
 		defines 'IS_FXSERVER'
 		startproject 'DuplicityMain'
 	else
@@ -289,12 +324,12 @@ workspace "CitizenMP"
 		buildoptions { '/Zc:__cplusplus', '/utf-8' }
 
 	filter { 'system:not windows', 'language:C or language:C++' }
-		architecture 'x64'
+		architecture (cfx_premake_arch)
 
 		links { 'stdc++' }
 
 		buildoptions {
-			"-fPIC", -- required to link on AMD64
+			"-fPIC", -- required to link on AMD64/AArch64
 			"-fvisibility=hidden", -- default visibility
 		}
 

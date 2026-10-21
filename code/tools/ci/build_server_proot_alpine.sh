@@ -57,7 +57,16 @@ fi
 # build CitizenFX
 cd /src/code
 
-premake5 gmake2 --game=server --cc=clang --dotnet=msnet
+# map the target architecture (x86_64 or aarch64) to a premake --arch value
+ARCH=${ARCH:-$(uname -m)}
+
+case "$ARCH" in
+	x86_64) PREMAKE_ARCH=x64 ;;
+	aarch64|arm64) PREMAKE_ARCH=arm64 ;;
+	*) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
+premake5 gmake2 --game=server --cc=clang --dotnet=msnet --arch=$PREMAKE_ARCH
 cd build/server/linux
 
 export CFLAGS="-fno-plt"

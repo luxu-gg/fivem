@@ -57,7 +57,9 @@ return {
 		filter { 'system:not windows' }
 			defines { 'USE_PTHREAD' }
 
-			buildoptions { '-mrtm', '-mwaitpkg' }
+			if cfx_is_x86_target() then
+				buildoptions { '-mrtm', '-mwaitpkg' }
+			end
 
 		filter { 'system:windows' }
 			defines { 'USE_WINTHREAD', '_WIN32_WINNT=0x0601' }

@@ -16,7 +16,13 @@
 #include <pthread.h>
 #endif
 
+#include "cpu_features_macros.h"
+
+#ifdef CPU_FEATURES_ARCH_X86
+// cpuinfo_x86.h refuses to be included on non-x86 targets
 #include "cpuinfo_x86.h"
+#endif
+
 #include "Error.h"
 
 bool InitializeExceptionHandler(int argc, char* argv[]);

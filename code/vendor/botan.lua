@@ -29,7 +29,9 @@ return {
 		else
 			defines { "BOTAN_DLL=__attribute__((visibility(\"default\")))" }
 
-			buildoptions { '-msse', '-msse2' }
+			if cfx_is_x86_target() then
+				buildoptions { '-msse', '-msse2' }
+			end
 		end
 
 		defines { "BOTAN_IS_BEING_BUILT" }
@@ -49,6 +51,9 @@ return {
 				}				
 			end
 		elseif os.istarget('linux') then
+			-- TODO(arm64): vendor/botan_sv/src/linux/ and include/build_linux.h are an x86_64-specific
+			-- Botan amalgamation (SSE2/SSSE3/AES-NI/RDRAND modules, x86_64 build.h). An aarch64
+			-- amalgamation has to be generated before FXServer can be built for arm64.
 			prebuildcommands {
 				('cp -a %s %s'):format(
 					path.getabsolute('vendor/botan_sv/include/build_linux.h'),

@@ -6,6 +6,10 @@ export CI_BUILD_NUMBER='v1.0.0.'$CI_PIPELINE_ID
 
 CURRENT_FOLDER_NAME=$(basename "$PWD")
 
+# target architecture (x86_64 or aarch64); the build runs natively, so default to the host
+ARCH=${ARCH:-$(uname -m)}
+export ARCH
+
 cd ..
 
 # clone fivem-private
@@ -97,7 +101,7 @@ for i in $PWD/alpine/lib/*.so.* $PWD/alpine/usr/lib/*.so.*; do
 done
 
 # place elf interpreter
-cp -a $PWD/alpine/lib/ld-musl-x86_64.so.1 $PWD/alpine/opt/cfx-server/
+cp -a $PWD/alpine/lib/ld-musl-$ARCH.so.1 $PWD/alpine/opt/cfx-server/
 
 # package system resources
 mkdir -p $PWD/alpine/opt/cfx-server/citizen/system_resources/

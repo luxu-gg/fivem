@@ -52,6 +52,8 @@ return {
 					('{COPY} %s/%s %%{cfg.targetdir}/dbg/'):format(uvBinDir, pdbName),
                 }
 		else
+			-- TODO(arm64): the prebuilt libuv .so downloaded below is x86_64-only; an aarch64 build
+			-- (and an arch-specific download URL) is required before FXServer can be built for arm64.
 			filter 'files:**/tag.txt'
                 buildmessage 'Preparing libuv'
 

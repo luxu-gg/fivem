@@ -448,7 +448,17 @@ bool InitializeExceptionHandler(int argc, char* argv[])
 
 	std::vector<char*> args;
 
-	if (access("/lib/ld-musl-x86_64.so.1", F_OK) != -1)
+	// the musl dynamic loader for the architecture this binary was built for; if it exists we are
+	// running inside the Alpine environment and can re-exec FXServer directly, otherwise go via run.sh
+#if defined(__x86_64__)
+	static constexpr const char* kMuslLoaderPath = "/lib/ld-musl-x86_64.so.1";
+#elif defined(__aarch64__)
+	static constexpr const char* kMuslLoaderPath = "/lib/ld-musl-aarch64.so.1";
+#else
+#error Unsupported architecture: add the musl dynamic loader path for this target
+#endif
+
+	if (access(kMuslLoaderPath, F_OK) != -1)
 	{
 		args.resize(3);
 		args[0] = strdup(MakeRelativeCitPath(L"FXServer").c_str());

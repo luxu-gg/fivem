@@ -22,6 +22,9 @@ return function()
 			libdirs { cwd .. "/deps/lib/" }
 		end
 	else
+		-- TODO(arm64): the static mono runtime linked here comes from the cfx Alpine apk repository
+		-- (mono 5.16.1.0-r9991, see tools/ci/docker-builder/proot_prepare.sh), which is only
+		-- published for x86_64. An aarch64 package is needed before FXServer can be built for arm64.
 		includedirs { '/usr/include/mono-2.0/ '}
 	
 		linkoptions '/usr/lib/libmonosgen-2.0.a -Wl,--defsym=mono_handle_native_crash=mono_handle_native_crash_nop'
