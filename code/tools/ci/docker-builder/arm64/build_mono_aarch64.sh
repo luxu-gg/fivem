@@ -15,6 +15,9 @@
 #   MONO_OUT    where the final tarball + SHA256SUMS go (default $MONO_WORK/out)
 set -eu
 
+# directory of this script (patches and checksum files live next to it); resolved before any cd
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
 MONO_VER=5.16.1.0
 APK_REL=r9991
 CHOST=aarch64-alpine-linux-musl
@@ -51,7 +54,7 @@ fetch() {
 		[ -f apk/$p-$MONO_VER-$APK_REL.apk ] || curl -fL --retry 5 -o apk/$p-$MONO_VER-$APK_REL.apk \
 			$CFX_APK_BASE/$p-$MONO_VER-$APK_REL.apk
 	done
-	sha256sum -c "$(dirname "$0")/mono-sources.sha256" 2>/dev/null || {
+	sha256sum -c "$SCRIPT_DIR/mono-sources.sha256" 2>/dev/null || {
 		echo "NOTE: no/outdated mono-sources.sha256 next to this script; sums of what was fetched:"
 		sha256sum mono-$MONO_VER.tar.bz2 *.patch apk/*.apk
 	}
@@ -72,8 +75,8 @@ build() {
 			echo "patch $p does not apply cleanly (already in $MONO_VER?), skipping"
 		fi
 	done
-	for p in "$(dirname "$0")"/mono-*.patch; do
-		[ -f "$p" ] || continue
+	for p in "$SCRIPT_DIR"/mono-*.patch; do
+		[ -f "$p" ] || { echo "no mono-*.patch next to the script in $SCRIPT_DIR"; exit 1; }
 		echo "applying $(basename "$p")"
 		patch -p1 -N < "$p"
 	done
