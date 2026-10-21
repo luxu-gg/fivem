@@ -1,0 +1,13 @@
+diff --git a/deps/zlib/zlib.gyp b/deps/zlib/zlib.gyp
+index 12449e7b0..e1f952055 100644
+--- a/deps/zlib/zlib.gyp
++++ b/deps/zlib/zlib.gyp
+@@ -69,7 +69,7 @@
+           'conditions': [
+             ['OS!="ios"', {
+               'conditions': [
+-                ['OS!="win" and clang==0', {
++                ['OS!="win"', {
+                   'cflags': [ '-march=armv8-a+aes+crc' ],
+                 }],
+                 ['OS=="android"', {

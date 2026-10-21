@@ -1,0 +1,152 @@
+--- a/mono/utils/Makefile.am
++++ b/mono/utils/Makefile.am
+@@ -151,6 +151,7 @@
+ 	mono-threads-debug.h	\
+ 	mono-threads-api.h	\
+ 	mono-threads-coop.c	\
++	cfx-debug.c	\
+ 	mono-threads-coop.h	\
+ 	mono-tls.h	\
+ 	mono-tls.c	\
+--- /dev/null
++++ b/mono/utils/cfx-debug.c
+@@ -0,0 +1,139 @@
++/*
++ * cfx-debug.c: bounded managed stack walks for the CitizenFX mono host.
++ *
++ * The cfx mono 5.16.1.0 packages (x86_64 apk, object libmonoutils_la-cfx-debug.o) export two
++ * functions that are not part of upstream mono and that
++ * code/components/citizen-scripting-mono/src/MonoComponentHost.cpp relies on:
++ *
++ *   MonoArray* mono_get_current_context (void *stack_origin)
++ *   void mono_stack_walk_bounded (MonoStackWalk func, MonoArray *startRef, MonoArray *endRef, void *user_data)
++ *
++ * Their source is not published; this file reconstructs them from the disassembly and DWARF
++ * information of that object (same names, types, control flow and constants) so that the
++ * aarch64 build exports the same interface. Architecture-specific register access goes through
++ * the MONO_CONTEXT_* macros.
++ */
++#include <config.h>
++#include <glib.h>
++
++#include <mono/mini/mini.h>
++#include <mono/mini/mini-runtime.h>
++#include <mono/metadata/object-internals.h>
++#include <mono/utils/mono-error-internals.h>
++
++MONO_API MonoArray* mono_get_current_context (gpointer stack_origin);
++MONO_API void mono_stack_walk_bounded (MonoStackWalk func, MonoArray *startRef, MonoArray *endRef, gpointer user_data);
++
++typedef struct {
++	MonoThreadUnwindState *state;
++	gpointer origin;
++} FindContextElementState;
++
++static gboolean
++find_context_element (StackFrameInfo *frame, MonoContext *ctx, gpointer data)
++{
++	FindContextElementState *s = (FindContextElementState *)data;
++
++	/* skip the frames at or below the native caller's stack origin */
++	if ((gsize)s->origin >= (gsize)MONO_CONTEXT_GET_SP (ctx))
++		return FALSE;
++
++	if (frame->type != FRAME_TYPE_MANAGED && frame->type != FRAME_TYPE_INTERP)
++		return FALSE;
++
++	s->state->ctx = *ctx;
++	return TRUE;
++}
++
++/*
++ * Captures the unwind state of the first managed frame above stack_origin as a byte[] blob
++ * (a MonoThreadUnwindState) for a later mono_stack_walk_bounded.
++ */
++MONO_API MonoArray*
++mono_get_current_context (gpointer stack_origin)
++{
++	MonoThreadUnwindState cxt;
++	FindContextElementState state;
++	MonoError error;
++	MonoArray *blob;
++
++	mono_thread_state_init (&cxt);
++
++	state.state = &cxt;
++	state.origin = stack_origin;
++	mono_walk_stack_with_state (find_context_element, &cxt, MONO_UNWIND_NONE, &state);
++
++	blob = mono_array_new_checked (mono_domain_get (), mono_get_byte_class (), sizeof (MonoThreadUnwindState), &error);
++	mono_error_assert_ok (&error);
++
++	mono_value_copy_array (blob, 0, &cxt, sizeof (MonoThreadUnwindState));
++
++	return blob;
++}
++
++typedef struct {
++	MonoStackWalk func;
++	gpointer user_data;
++	MonoThreadUnwindState *end;
++} StackWalkUserData;
++
++static gboolean
++stack_walk_adapter (StackFrameInfo *frame, MonoContext *ctx, gpointer data)
++{
++	StackWalkUserData *d = (StackWalkUserData *)data;
++
++	/* stop once the walk has passed the end context */
++	if (d->end && (gsize)MONO_CONTEXT_GET_SP (ctx) > (gsize)MONO_CONTEXT_GET_SP (&d->end->ctx))
++		return TRUE;
++
++	switch (frame->type) {
++	case FRAME_TYPE_DEBUGGER_INVOKE:
++	case FRAME_TYPE_MANAGED_TO_NATIVE:
++	case FRAME_TYPE_TRAMPOLINE:
++	case FRAME_TYPE_INTERP_TO_MANAGED:
++	case FRAME_TYPE_INTERP_TO_MANAGED_WITH_CTX:
++		return FALSE;
++	case FRAME_TYPE_MANAGED:
++	case FRAME_TYPE_INTERP:
++		g_assert (frame->ji);
++		return d->func (frame->actual_method, frame->native_offset, frame->il_offset, frame->managed, d->user_data);
++	default:
++		g_assert_not_reached ();
++		return TRUE;
++	}
++}
++
++/*
++ * Like mono_stack_walk, but starts from the state captured by mono_get_current_context
++ * (startRef, NULL for the current context) and stops at the frame captured in endRef (NULL for
++ * no bound).
++ */
++MONO_API void
++mono_stack_walk_bounded (MonoStackWalk func, MonoArray *startRef, MonoArray *endRef, gpointer user_data)
++{
++	MonoThreadUnwindState *start = NULL, *end = NULL;
++	StackWalkUserData ud;
++
++	if (startRef) {
++		uint8_t *startPtr = (uint8_t *)mono_array_addr_with_size (startRef, 1, 0);
++		start = (MonoThreadUnwindState *)startPtr;
++	}
++
++	if (endRef) {
++		uint8_t *endPtr = (uint8_t *)mono_array_addr_with_size (endRef, 1, 0);
++		end = (MonoThreadUnwindState *)endPtr;
++	}
++
++	ud.func = func;
++	ud.user_data = user_data;
++	ud.end = end;
++
++	if (start) {
++		/* the captured frame sits below the current managed-to-native transition, so continue
++		 * the LMF chain from the entry before the current one (the low bits are flags) */
++		MonoLMF *lmf = mono_get_lmf ();
++		start->unwind_data [MONO_UNWIND_DATA_LMF] = (gpointer)(((gsize)lmf->previous_lmf) & ~(gsize)7);
++	}
++
++	mono_walk_stack_with_state (stack_walk_adapter, start, MONO_UNWIND_DEFAULT, &ud);
++}

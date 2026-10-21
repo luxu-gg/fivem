@@ -8,11 +8,39 @@ local libName = 'libuv.lib'
 local soName = 'libuv.so'
 local linuxShortName = 'uv'
 
+-- cfx only publishes prebuilt Linux binaries for x86_64. On other architectures (arm64) libuv.so is
+-- built together with libnode22.so by code/tools/ci/docker-builder/arm64/build_libnode_aarch64.sh
+-- and read from CFX_LIBNODE_DIR (default: vendor/libnode/bin/linux-<arch>/), or downloaded from
+-- CFX_LIBNODE_URL/libuv.so when that is set; without either, the distro libuv is used (see below).
+-- Returns the binary directory and the download base URL (nil when no download should happen).
+local function prebuiltSource(defaultDir, defaultURL)
+	if os.istarget('windows') or cfx_is_x86_target() then
+		return defaultDir, defaultURL
+	end
+
+	local dir = os.getenv('CFX_LIBNODE_DIR') or (path.getabsolute('../') .. '/vendor/libnode/bin/linux-' .. cfx_target_arch)
+	return dir, os.getenv('CFX_LIBNODE_URL')
+end
+
+-- true when a cfx-built libuv.so is available (or downloadable) for a non-x86 Linux target
+local function havePrebuilt()
+	if os.istarget('windows') or cfx_is_x86_target() then
+		return false
+	end
+
+	local dir, url = prebuiltSource()
+	return url ~= nil or os.isfile(dir .. '/' .. soName)
+end
+
 return {
 	include = function()
 		includedirs { '../vendor/libnode/include/node/uv/include/' }
 
-        libdirs { '../vendor/libuv/bin/' }
+        if os.istarget('windows') or cfx_is_x86_target() or not havePrebuilt() then
+            libdirs { '../vendor/libuv/bin/' }
+        else
+            libdirs { (prebuiltSource()) }
+        end
         if os.istarget('windows') then
             links { libName }
         else
@@ -51,7 +79,20 @@ return {
 					'{MKDIR} %{cfg.targetdir}/dbg/',
 					('{COPY} %s/%s %%{cfg.targetdir}/dbg/'):format(uvBinDir, pdbName),
                 }
-		elseif cfx_is_x86_target() then
+		elseif cfx_is_x86_target() or havePrebuilt() then
+			local binDir, url = prebuiltSource(uvBinDir, baseURL)
+			local commands = {}
+
+			if url then
+				if not cfx_is_x86_target() then
+					table.insert(commands, ('{MKDIR} %s'):format(binDir))
+				end
+
+				table.insert(commands, ('curl "-z%s/%s" -L "-o%s/%s" "%s/%s"'):format(binDir, soName, binDir, soName, url, soName))
+			end
+
+			table.insert(commands, ('{COPY} %s/%s %%{cfg.targetdir}'):format(binDir, soName))
+
 			filter 'files:**/tag.txt'
                 buildmessage 'Preparing libuv'
 
@@ -59,13 +100,10 @@ return {
                     ('%%{cfg.targetdir}/%s'):format(soName),
                 }
 
-                buildcommands {
-                    ('curl "-z%s/%s" -L "-o%s/%s" "%s/%s"'):format(uvBinDir, soName, uvBinDir, soName, baseURL, soName),
-					('{COPY} %s/%s %%{cfg.targetdir}'):format(uvBinDir, soName),
-                }
+                buildcommands(commands)
 		else
-			-- no prebuilt libuv is published for this architecture: use the distro libuv (libuv-dev;
-			-- the 1.x ABI is stable) and ship a copy of it next to the server binaries
+			-- no cfx-built libuv for this architecture (no CFX_LIBNODE_DIR/CFX_LIBNODE_URL): use the distro
+			-- libuv (libuv-dev; the 1.x ABI is stable) and ship a copy of it next to the server binaries
 			filter 'files:**/tag.txt'
                 buildmessage 'Preparing libuv from the system'
 

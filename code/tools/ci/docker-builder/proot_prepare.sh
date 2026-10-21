@@ -44,10 +44,42 @@ apk del curl
 # install runtime dependencies
 apk add --no-cache curl=7.72.0-r99 libssl1.1 libcrypto1.1 libunwind libstdc++ zlib c-ares v8~=9.3 musl-dbg libatomic
 
+# mono 5.16.1.0-r9991: the cfx apk repository only publishes x86_64 packages. On aarch64 the same
+# versions are installed to the same paths from the tarball produced by arm64/build_mono_aarch64.sh
+# (see arm64/README.md); MONO_AARCH64_TARBALL may point at a local file or an http(s) URL.
+MONO_VERSION=5.16.1.0-r9991
+MONO_APKS="mono-reference-assemblies=$MONO_VERSION mono-dev=$MONO_VERSION libmono=$MONO_VERSION mono-corlib=$MONO_VERSION mono=$MONO_VERSION mono-reference-assemblies-4.x=$MONO_VERSION mono-reference-assemblies-facades=$MONO_VERSION mono-csc=$MONO_VERSION mono-runtime=$MONO_VERSION"
+MONO_AARCH64_TARBALL=${MONO_AARCH64_TARBALL:-/utils/arm64/mono-$MONO_VERSION-aarch64-musl.tar.xz}
+
+case "$(apk --print-arch)" in
+	aarch64) MONO_APKS="" ;;
+esac
+
 # install compile-time dependencies
-# TODO(arm64): the mono 5.16.1.0-r9991 packages come from the cfx apk repository, which only publishes
-# x86_64 builds; an aarch64 build of them is required before this script can run on arm64.
-apk add --no-cache --virtual .dev-deps lld~=13 curl-dev=7.72.0-r99 clang-dev~=13 clang~=13 build-base linux-headers openssl1.1-compat-dev openssl-dev~=1.1 python3 py3-pip py3-virtualenv lua5.3 lua5.3-dev mono-reference-assemblies=5.16.1.0-r9991 mono-dev=5.16.1.0-r9991 libmono=5.16.1.0-r9991 mono-corlib=5.16.1.0-r9991 mono=5.16.1.0-r9991 mono-reference-assemblies-4.x=5.16.1.0-r9991 mono-reference-assemblies-facades=5.16.1.0-r9991 mono-csc=5.16.1.0-r9991 mono-runtime=5.16.1.0-r9991 c-ares-dev v8-dev~=9.3 clang-libs~=13 git dotnet6-sdk
+apk add --no-cache --virtual .dev-deps lld~=13 curl-dev=7.72.0-r99 clang-dev~=13 clang~=13 build-base linux-headers openssl1.1-compat-dev openssl-dev~=1.1 python3 py3-pip py3-virtualenv lua5.3 lua5.3-dev $MONO_APKS c-ares-dev v8-dev~=9.3 clang-libs~=13 git dotnet6-sdk
+
+if [ -z "$MONO_APKS" ]; then
+	case "$MONO_AARCH64_TARBALL" in
+		http://*|https://*)
+			curl --http1.1 -fsSLo /tmp/mono-aarch64.tar.xz "$MONO_AARCH64_TARBALL"
+			MONO_AARCH64_TARBALL=/tmp/mono-aarch64.tar.xz
+			;;
+	esac
+
+	if [ ! -f "$MONO_AARCH64_TARBALL" ]; then
+		echo "error: $MONO_AARCH64_TARBALL not found; build it with code/tools/ci/docker-builder/arm64/build_mono_aarch64.sh or set MONO_AARCH64_TARBALL" >&2
+		exit 1
+	fi
+
+	if [ -f "$(dirname "$0")/arm64/mono-$MONO_VERSION-aarch64-musl.tar.xz.sha256" ]; then
+		echo "$(cut -d' ' -f1 "$(dirname "$0")/arm64/mono-$MONO_VERSION-aarch64-musl.tar.xz.sha256")  $MONO_AARCH64_TARBALL" | sha256sum -c -
+	fi
+
+	# the runtime's dependencies (mono-dev depends on zlib-dev, the runtime on libgcc/zlib); the
+	# tarball itself is not an apk, so these are not removed by `apk del .dev-deps` later
+	apk add --no-cache zlib-dev libgcc xz
+	tar -xJf "$MONO_AARCH64_TARBALL" -C /
+fi
 
 # install python deps
 python3 -m venv /root/py-venv

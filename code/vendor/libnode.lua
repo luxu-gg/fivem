@@ -8,6 +8,20 @@ local libName = ('libnode%s.lib'):format(majorVersion)
 local soName = ('libnode%s.so'):format(majorVersion)
 local linuxShortName = ('node%s'):format(majorVersion)
 
+-- cfx only publishes prebuilt Linux binaries for x86_64. On other architectures (arm64) libnode22.so
+-- and libuv.so are built with code/tools/ci/docker-builder/arm64/build_libnode_aarch64.sh and read
+-- from CFX_LIBNODE_DIR (default: vendor/libnode/bin/linux-<arch>/), or downloaded from
+-- CFX_LIBNODE_URL/<file> when that is set. Returns the binary directory and the download base URL
+-- (nil when the files are expected to already be in place).
+local function prebuiltSource(defaultDir, defaultURL)
+	if os.istarget('windows') or cfx_is_x86_target() then
+		return defaultDir, defaultURL
+	end
+
+	local dir = os.getenv('CFX_LIBNODE_DIR') or (path.getabsolute('../') .. '/vendor/libnode/bin/linux-' .. cfx_target_arch)
+	return dir, os.getenv('CFX_LIBNODE_URL')
+end
+
 return {
 	include = function()
 		includedirs { '../vendor/libnode/include/' }
@@ -16,7 +30,7 @@ return {
 		includedirs { '../vendor/libnode/include/node/v8/include/' }
 		includedirs { '../vendor/libnode/include/node/openssl/' }
 
-        libdirs { '../vendor/libnode/bin/' }
+        libdirs { (prebuiltSource('../vendor/libnode/bin/')) }
         if os.istarget('windows') then
             links { libName }
         else
@@ -55,8 +69,21 @@ return {
 					('{COPY} %s/%s %%{cfg.targetdir}/dbg/'):format(nodeBinDir, pdbName),
                 }
 		else
-			-- TODO(arm64): the prebuilt libnode .so downloaded below is x86_64-only; an aarch64 build
-			-- (and an arch-specific download URL) is required before FXServer can be built for arm64.
+			local binDir, url = prebuiltSource(nodeBinDir, baseURL)
+			local commands = {}
+
+			if url then
+				if not cfx_is_x86_target() then
+					table.insert(commands, ('{MKDIR} %s'):format(binDir))
+				end
+
+				table.insert(commands, ('curl "-z%s/%s" -L "-o%s/%s" "%s/%s"'):format(binDir, soName, binDir, soName, url, soName))
+			else
+				table.insert(commands, ('test -f "%s/%s" || { echo "%s/%s not found: build it with code/tools/ci/docker-builder/arm64/build_libnode_aarch64.sh, or set CFX_LIBNODE_DIR / CFX_LIBNODE_URL" >&2; exit 1; }'):format(binDir, soName, binDir, soName))
+			end
+
+			table.insert(commands, ('{COPY} %s/%s %%{cfg.targetdir}'):format(binDir, soName))
+
 			filter 'files:**/tag.txt'
                 buildmessage 'Preparing libnode'
 
@@ -64,10 +91,7 @@ return {
                     ('%%{cfg.targetdir}/%s'):format(soName),
                 }
 
-                buildcommands {
-                    ('curl "-z%s/%s" -L "-o%s/%s" "%s/%s"'):format(nodeBinDir, soName, nodeBinDir, soName, baseURL, soName),
-					('{COPY} %s/%s %%{cfg.targetdir}'):format(nodeBinDir, soName),
-                }
+                buildcommands(commands)
 		end
 
 		filter {}
