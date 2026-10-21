@@ -42,6 +42,10 @@ RUN git clone https://github.com/proot-me/proot.git && \
 # Copy the preparation script into the Alpine environment
 COPY code/tools/ci/docker-builder/proot_prepare.sh /app/alpine/utils/proot_prepare.sh
 
+# aarch64: the mono runtime comes from a tarball instead of the cfx apk repository (see arm64/README.md);
+# drop mono-5.16.1.0-r9991-aarch64-musl.tar.xz into code/tools/ci/docker-builder/arm64/ before building
+COPY code/tools/ci/docker-builder/arm64/ /app/alpine/utils/arm64/
+
 # Run the preparation script using PRoot inside the Alpine environment
 RUN /usr/local/bin/proot \
     --kill-on-exit \
