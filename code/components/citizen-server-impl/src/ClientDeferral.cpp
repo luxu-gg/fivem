@@ -12,7 +12,9 @@
 #include <SharedFunction.h>
 #include <UvLoopManager.h>
 
+#ifndef WITHOUT_MONO
 #include <MonoThreadAttachment.h>
+#endif
 
 namespace fx
 {

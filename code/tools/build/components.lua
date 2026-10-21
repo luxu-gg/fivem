@@ -120,7 +120,20 @@ local function find_match(id)
 	return nil
 end
 
-local function process_dependencies(list, basename, deps, hasDeps)
+-- `optional_dependencies` in component.json names entries of `dependencies` that may be absent from
+-- the build (e.g. citizen:scripting:mono with --without-mono): instead of dropping the component, the
+-- dependency is skipped (not linked, not included) and left out of the component's runtime json copy.
+local function is_optional_dependency(dep, optional)
+	for _, v in ipairs(optional or {}) do
+		if v == dep then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function process_dependencies(list, basename, deps, hasDeps, optional, missingOptional)
 	local isFulfilled = true
 
 	if not basename then
@@ -150,9 +163,15 @@ local function process_dependencies(list, basename, deps, hasDeps)
 
 				match.tagged = true
 
-				isFulfilled = isFulfilled and process_dependencies(match.dependencies, match.name, deps, hasDeps)
+				isFulfilled = isFulfilled and process_dependencies(match.dependencies, match.name, deps, hasDeps, match.optional_dependencies)
 			elseif not match then
-				if not dep:match('%[') then
+				if is_optional_dependency(dep, optional) then
+					print('Optional dependency ' .. dep .. ' not available for ' .. basename .. ', skipping')
+
+					if missingOptional then
+						table.insert(missingOptional, dep)
+					end
+				elseif not dep:match('%[') then
 					print('Dependency unresolved for ' .. dep .. ' in ' .. basename)
 
 					return false
@@ -215,8 +234,9 @@ local do_component = function(name, comp)
 
 	local deps = {}
 	local hasDeps = {}
+	local missingOptional = {}
 
-	if not process_dependencies(comp.dependencies, comp.name, deps, hasDeps) then
+	if not process_dependencies(comp.dependencies, comp.name, deps, hasDeps, comp.optional_dependencies, missingOptional) then
 		return
 	end
 
@@ -224,6 +244,40 @@ local do_component = function(name, comp)
 
 	-- path stuff
 	local relPath = path.getrelative(path.getabsolute(''), comp.absPath)
+
+	-- the runtime loader resolves `dependencies` from the json copied next to the component, so a
+	-- copy without the skipped optional dependencies is generated into the build directory
+	local componentJson = relPath .. "/component.json"
+
+	if #missingOptional > 0 then
+		componentJson = path.join(_OPTIONS['builddir'] or 'build/', _OPTIONS['game'], 'components', name, 'component.json')
+
+		local function json_string_array(list)
+			local items = {}
+
+			for _, v in ipairs(list) do
+				table.insert(items, ('\t\t"%s"'):format(v))
+			end
+
+			return (#items > 0) and ('[\n' .. table.concat(items, ',\n') .. '\n\t]') or '[]'
+		end
+
+		local dependencies = {}
+
+		for _, dep in ipairs(comp.dependencies) do
+			if not is_optional_dependency(dep, missingOptional) then
+				table.insert(dependencies, dep)
+			end
+		end
+
+		os.mkdir(path.getdirectory(componentJson))
+		io.writefile(componentJson, ('{\n\t"name": "%s",\n\t"version": "%s",\n\t"dependencies": %s,\n\t"provides": %s\n}\n'):format(
+			comp.name,
+			comp.version,
+			json_string_array(dependencies),
+			json_string_array(comp.provides or {})
+		))
+	end
 
 	-- set group depending on origin
 	local groupName = ''
@@ -426,7 +480,7 @@ local do_component = function(name, comp)
 
 		filter { "system:not windows" }
 			files {
-				relPath .. "/component.json"
+				componentJson
 			}
 
 		filter { "system:not windows", "files:**/component.json" }

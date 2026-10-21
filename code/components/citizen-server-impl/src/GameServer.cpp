@@ -21,7 +21,9 @@
 #include <UvLoopManager.h>
 #include <UvTcpServer.h> // for UvCallback
 
+#ifndef WITHOUT_MONO
 #include <MonoThreadAttachment.h>
+#endif
 
 #include <HttpClient.h>
 #include <TcpListenManager.h>
@@ -868,7 +870,9 @@ namespace fx
 
 	void GameServer::ProcessServerFrame(int frameTime)
 	{
+#ifndef WITHOUT_MONO
 		MonoEnsureThreadAttached();
+#endif
 		m_seContext->MakeCurrent();
 
 		m_serverTime += frameTime;
@@ -1131,7 +1135,9 @@ namespace fx
 		ForceHeartbeatSoon();
 
 		// ensure mono thread attachment (if this was a worker thread)
+#ifndef WITHOUT_MONO
 		MonoEnsureThreadAttached();
+#endif
 
 		// verify if the client is still using a TempID
 		bool isFinal = client->HasConnected();

@@ -31,5 +31,8 @@
 		"vendor:xenium",
 		"vendor:rocksdb"
 	],
+	"optional_dependencies": [
+		"citizen:scripting:mono"
+	],
 	"provides": []
 }

@@ -29,7 +29,9 @@
 
 #include <ServerIdentityProvider.h>
 
+#ifndef WITHOUT_MONO
 #include <MonoThreadAttachment.h>
+#endif
 #include <GameBuilds.h>
 #include <CrossBuildRuntime.h>
 #include <PoolSizesState.h>

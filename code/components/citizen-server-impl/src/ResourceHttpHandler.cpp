@@ -22,7 +22,9 @@
 
 #include <GameServerComms.h>
 
+#ifndef WITHOUT_MONO
 #include <MonoThreadAttachment.h>
+#endif
 #include <SharedFunction.h>
 
 #include <TcpListenManager.h>

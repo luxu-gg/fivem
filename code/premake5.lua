@@ -62,6 +62,19 @@ function cfx_is_x86_target()
 	return cfx_target_arch == 'x64'
 end
 
+newoption {
+	trigger     = "without-mono",
+	description = "Build the server without the Mono runtime (no C# projects, no citizen-scripting-mono components)."
+}
+
+-- Mono is only available for some server targets; this lets the Linux FXServer build without it.
+-- Shared with components/config.lua and component.lua scripts (like cfx_target_arch above).
+_G.cfx_without_mono = _OPTIONS['without-mono'] ~= nil
+
+if cfx_without_mono and _OPTIONS['game'] ~= 'server' then
+	error('--without-mono is only supported for server builds')
+end
+
 local PROGRAM_DETAILS = {
 	['server']  = { publicName = 'Server',   cSharp = { nativesFile = 'NativesServer.cs', gameFiles = 'Server/*.cs' } },
 	
@@ -549,7 +562,7 @@ premake.override(premake.vstudio.dotnetbase, "nuGetReferences", function(base, c
 	return base(cfgOrPrj)
 end)
 
-if _OPTIONS['game'] ~= 'launcher' then
+if _OPTIONS['game'] ~= 'launcher' and not cfx_without_mono then
 
 	function csproject(projectName, targetName)
 		do project(projectName)

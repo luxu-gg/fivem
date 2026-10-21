@@ -80,10 +80,27 @@ fi
 
 ## SETUP-CUTOFF
 
+# WITHOUT_MONO=1 builds the server without the Mono runtime (no C# resource support): the cfx mono
+# package only exists for x86_64, so it defaults to on for arm64. Set WITHOUT_MONO=0 to force a
+# mono build once an aarch64 package is available.
+if [ -z "$WITHOUT_MONO" ]; then
+	if [ "$PREMAKE_ARCH" = "arm64" ]; then
+		WITHOUT_MONO=1
+	else
+		WITHOUT_MONO=0
+	fi
+fi
+
+PREMAKE_MONO_ARGS=""
+
+if [ "$WITHOUT_MONO" = "1" ]; then
+	PREMAKE_MONO_ARGS="--without-mono"
+fi
+
 # build CitizenFX
 cd /src/code
 
-premake5 gmake2 --game=server --cc=clang --dotnet=msnet --arch=$PREMAKE_ARCH
+premake5 gmake2 --game=server --cc=clang --dotnet=msnet --arch=$PREMAKE_ARCH $PREMAKE_MONO_ARGS
 cd build/server/linux
 
 export CFLAGS="-fno-plt"
@@ -122,12 +139,18 @@ cp -a bin/server/linux/release/*.json /opt/cfx-server
 cp tools/ci/run.sh /opt/cfx-server
 chmod +x /opt/cfx-server/run.sh
 
+# only the C# projects put anything in here, so it may not exist without mono
+if [ -d bin/server/linux/release/citizen/ ]; then
+	cp -a bin/server/linux/release/citizen/ /opt/cfx-server
+fi
+
+if [ "$WITHOUT_MONO" != "1" ]; then
+
 mkdir -p /opt/cfx-server/citizen/clr2/cfg/mono/4.5/
 mkdir -p /opt/cfx-server/citizen/clr2/lib/mono/4.5/
 
 cp -a /etc/mono/4.5/machine.config /opt/cfx-server/citizen/clr2/cfg/mono/4.5/machine.config
 
-cp -a bin/server/linux/release/citizen/ /opt/cfx-server
 cp -a ../data/client/citizen/clr2/lib/mono/4.5/MsgPack.dll /opt/cfx-server/citizen/clr2/lib/mono/4.5/
 
 cp -a /usr/lib/mono/4.5/Facades/ /opt/cfx-server/citizen/clr2/lib/mono/4.5/Facades/
@@ -138,6 +161,50 @@ cp -a /usr/lib/libmono-btls-shared.so /tmp/libmono-btls-shared.so
 for dll in I18N.CJK.dll I18N.MidEast.dll I18N.Other.dll I18N.Rare.dll I18N.West.dll I18N.dll Microsoft.CSharp.dll Mono.CSharp.dll Mono.Posix.dll Mono.Security.dll System.Collections.Immutable.dll System.ComponentModel.DataAnnotations.dll System.Configuration.dll System.Core.dll System.Data.dll System.Drawing.dll System.EnterpriseServices.dll System.IO.Compression.FileSystem.dll System.IO.Compression.dll System.Management.dll System.Net.Http.WebRequest.dll System.Net.Http.dll System.Net.dll System.Numerics.Vectors.dll System.Numerics.dll System.Reflection.Metadata.dll System.Runtime.InteropServices.RuntimeInformation.dll System.Runtime.Serialization.dll System.ServiceModel.Internals.dll System.ServiceModel.dll System.Transactions.dll System.Web.dll System.Xml.Linq.dll System.Xml.dll System.dll mscorlib.dll; do
 	cp /usr/lib/mono/4.5/$dll /opt/cfx-server/citizen/clr2/lib/mono/4.5/ || true
 done
+
+fi # WITHOUT_MONO
+
+# drop components that were not built from components.json (svadhesive without the private repo,
+# mono/node on architectures without a runtime): the loader aborts on startup when an entry has
+# no lib<name>.so next to it
+prune_components_json() {
+	local list="$1"
+	local dir=$(dirname "$list")
+	local kept=""
+	local name lib first
+
+	for name in $(grep -o '"[^"]*"' "$list" | tr -d '"'); do
+		lib="lib$(echo "$name" | tr ':' '-').so"
+
+		if [ -f "$dir/$lib" ]; then
+			kept="$kept $name"
+		else
+			echo "components.json: dropping $name ($lib was not built)"
+		fi
+	done
+
+	first=1
+
+	{
+		echo '['
+
+		for name in $kept; do
+			if [ $first = 1 ]; then
+				first=0
+			else
+				printf ',\n'
+			fi
+
+			printf '  "%s"' "$name"
+		done
+
+		printf '\n]\n'
+	} >"$list.tmp"
+
+	mv "$list.tmp" "$list"
+}
+
+prune_components_json /opt/cfx-server/components.json
 
 ## BUILD-CUTOFF
 
@@ -159,5 +226,7 @@ apk del .dev-deps
 rm -rf /usr/local
 rm -rf /usr/lib/python*
 
-mv /tmp/libMonoPosixHelper.so /usr/lib/libMonoPosixHelper.so
-mv /tmp/libmono-btls-shared.so /usr/lib/libmono-btls-shared.so
+if [ "$WITHOUT_MONO" != "1" ]; then
+	mv /tmp/libMonoPosixHelper.so /usr/lib/libMonoPosixHelper.so
+	mv /tmp/libmono-btls-shared.so /usr/lib/libmono-btls-shared.so
+fi

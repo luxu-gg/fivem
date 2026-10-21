@@ -15,8 +15,10 @@ if _OPTIONS['game'] == 'server' then
 		component 'citizen-devtools'
 		component 'citizen-server-fxdk'
 	end
-	component 'citizen-scripting-mono'
-	component 'citizen-scripting-mono-v2'
+	if not cfx_without_mono then
+		component 'citizen-scripting-mono'
+		component 'citizen-scripting-mono-v2'
+	end
 	component 'citizen-scripting-node'
 	component 'citizen-server-instance'
 	component 'citizen-server-impl'
