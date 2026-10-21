@@ -9,11 +9,16 @@ YARN=yarn
 
 [ "$OS" == "Windows_NT" ] && LUA53=./lua53
 [ "$OS" == "Windows_NT" ] && NODE=$ROOT/node
-[ "$OS" != "Windows_NT" ] && NODE=/tmp/node/node/bin/node
+# the prebuilt node tarball below is x86_64-only; other architectures use the system node
+USE_SYSTEM_NODE=0
+[ "$OS" != "Windows_NT" ] && [ "$(uname -m)" != "x86_64" ] && USE_SYSTEM_NODE=1
+
+[ "$OS" != "Windows_NT" ] && [ "$USE_SYSTEM_NODE" = "0" ] && NODE=/tmp/node/node/bin/node
+[ "$USE_SYSTEM_NODE" = "1" ] && NODE=$(command -v node)
 YARN="$NODE $ROOT/yarn_cli.js --mutex network"
 
 [ "$OS" == "Windows_NT" ] && curl -z node.exe -Lo node.exe https://content.cfx.re/mirrors/vendor/node/v12.22.12/node.exe --http1.1
-[ "$OS" != "Windows_NT" ] && mkdir /tmp/node && \
+[ "$OS" != "Windows_NT" ] && [ "$USE_SYSTEM_NODE" = "0" ] && mkdir /tmp/node && \
 	curl -Lo /tmp/node/node.tar.gz https://content.cfx.re/mirrors/vendor/node/v12.22.12/node-v12.22.12-linux-x64-musl.tar.gz && \
 	tar -C /tmp/node -xf /tmp/node/node.tar.gz && \
 	mv /tmp/node/node-* /tmp/node/node
@@ -57,4 +62,4 @@ else
     cp -a $ROOT/../natives/inp/natives_cfx_new.lua $ROOT/../natives/inp/natives_cfx.lua
 fi
 
-[ "$OS" != "Windows_NT" ] && rm -rf /tmp/node || true
+[ "$OS" != "Windows_NT" ] && [ "$USE_SYSTEM_NODE" = "0" ] && rm -rf /tmp/node || true

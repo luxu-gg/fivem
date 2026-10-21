@@ -1,3 +1,16 @@
+diff --git a/xenium/backoff.hpp b/xenium/backoff.hpp
+index fbb50a8..6709344 100644
+--- a/xenium/backoff.hpp
++++ b/xenium/backoff.hpp
+@@ -38,6 +38,8 @@ private:
+   void do_backoff() {
+ #ifdef XENIUM_ARCH_X86
+     _mm_pause();
++#elif defined(__aarch64__)
++    __asm__ __volatile__("yield" ::: "memory");
+ #else
+     #warning "No backoff implementation available."
+     std::this_thread::yield();
 diff --git a/xenium/utils.hpp b/xenium/utils.hpp
 index 81d1191..c25a448 100644
 --- a/xenium/utils.hpp

@@ -8,6 +8,32 @@ JOB_SLOTS=${JOB_SLOTS:-24}
 
 . /root/py-venv/bin/activate
 
+# map the target architecture (x86_64 or aarch64) to a premake --arch value
+ARCH=${ARCH:-$(uname -m)}
+
+case "$ARCH" in
+	x86_64) PREMAKE_ARCH=x64 ;;
+	aarch64|arm64) PREMAKE_ARCH=arm64 ;;
+	*) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
+# a few vendored submodules have no aarch64 support upstream yet; apply the small
+# patches from code/tools/ci/arm64-patches/ before anything uses them (idempotent:
+# a patch is skipped when it is already applied). File names map to the submodule
+# path with '__' standing in for '/': ext__native-doc-tooling.patch -> ext/native-doc-tooling
+if [ "$PREMAKE_ARCH" = "arm64" ]; then
+	for patch in /src/code/tools/ci/arm64-patches/*.patch; do
+		target=/src/$(basename "$patch" .patch | sed 's#__#/#g')
+
+		if git -C "$target" apply --check --reverse "$patch" >/dev/null 2>&1; then
+			echo "arm64 patch already applied: $patch"
+		else
+			echo "applying arm64 patch: $patch"
+			git -C "$target" apply "$patch"
+		fi
+	done
+fi
+
 # build natives
 if [ "$SKIP_NATIVES" == "" ]; then
 	cd /src/ext/natives
@@ -56,30 +82,6 @@ fi
 
 # build CitizenFX
 cd /src/code
-
-# map the target architecture (x86_64 or aarch64) to a premake --arch value
-ARCH=${ARCH:-$(uname -m)}
-
-case "$ARCH" in
-	x86_64) PREMAKE_ARCH=x64 ;;
-	aarch64|arm64) PREMAKE_ARCH=arm64 ;;
-	*) echo "unsupported architecture: $ARCH" >&2; exit 1 ;;
-esac
-
-# a few vendored submodules have no aarch64 support upstream yet; apply the small
-# patches from code/tools/ci/arm64-patches/ (idempotent: skipped when already applied)
-if [ "$PREMAKE_ARCH" = "arm64" ]; then
-	for patch in /src/code/tools/ci/arm64-patches/*.patch; do
-		target=/src/$(basename "$patch" .patch | tr '-' '/')
-
-		if git -C "$target" apply --check --reverse "$patch" >/dev/null 2>&1; then
-			echo "arm64 patch already applied: $patch"
-		else
-			echo "applying arm64 patch: $patch"
-			git -C "$target" apply "$patch"
-		fi
-	done
-fi
 
 premake5 gmake2 --game=server --cc=clang --dotnet=msnet --arch=$PREMAKE_ARCH
 cd build/server/linux
