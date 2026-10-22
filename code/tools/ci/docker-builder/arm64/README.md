@@ -134,5 +134,15 @@ without `citizen-scripting-node`).
 
 ## Artifacts
 
-SHA-256 sums of the artifacts built from these scripts are recorded in `SHA256SUMS` next to this
-file.
+SHA-256 sums of the artifacts built from these scripts (on a Raspberry Pi 5, Alpine 3.16 aarch64
+chroot, 2026-10-21) are recorded in `SHA256SUMS` next to this file:
+
+| file | built from | size |
+| --- | --- | --- |
+| `mono-5.16.1.0-r9991-aarch64-musl.tar.xz` | `build_mono_aarch64.sh` (clean run) | 66 MiB |
+| `libnode22-linux-arm64/libnode22.so` | citizenfx/libnode `c54d44f3` (v22.22.0) + nodejs/node `6add85e4`, `build_libnode_aarch64.sh` | 1.05 GiB (unstripped, like the x86_64 mirror file; the server packaging step splits the debug info into `.dbg`) |
+| `libnode22-linux-arm64/libuv.so` | same build (`deps/uv`, libuv 1.51.0, soname `libuv.so`) | 830 KiB |
+
+The binaries themselves are not in the repository. They are kept on the build host under
+`/opt/fxbuild/artifacts/`; point `MONO_AARCH64_TARBALL` and `CFX_LIBNODE_DIR`/`CFX_LIBNODE_URL` at
+wherever they are hosted.
